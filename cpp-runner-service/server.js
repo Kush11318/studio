@@ -56,25 +56,26 @@ app.post('/run', async (req, res) => {
     compileProcess.stdout.on('data', (data) => { compileStdout += data.toString(); });
     compileProcess.stderr.on('data', (data) => { compileStderr += data.toString(); });
 
+    compileProcess.on('error', (err) => { // Handle g++ spawn errors
+      clearTimeout(compileTimeout);
+      console.error(`Compilation process spawn error for ${uniqueId}:`, err);
+      compileStderr += `\nFailed to start g++ compiler: ${err.message}`;
+      // 'close' will still fire, so we don't resolve the promise here directly
+    });
+
     const compileExitCode = await new Promise((resolve) => {
       compileProcess.on('close', (code) => {
         clearTimeout(compileTimeout);
         resolve(code);
       });
-      compileProcess.on('error', (err) => {
-        clearTimeout(compileTimeout);
-        console.error(`Compilation process error for ${uniqueId}:`, err);
-        compileStderr += `\nFailed to start g++: ${err.message}`;
-        resolve(-1); // Indicate an error
-      });
     });
 
     if (compileKilledByTimeout) {
-      compileStderr += "\nCompilation timed out.";
+      compileStderr += (compileStderr ? "\n" : "") + "Compilation timed out after " + (COMPILATION_TIMEOUT_MS/1000) + " seconds.";
     }
 
     if (compileExitCode !== 0) {
-      return res.status(200).json({ output: compileStdout, error: `Compilation failed:\n${compileStderr}`.trim() });
+      return res.status(200).json({ output: compileStdout.trim(), error: `Compilation failed:\n${compileStderr}`.trim() });
     }
 
     // Run the compiled code
@@ -84,14 +85,12 @@ app.post('/run', async (req, res) => {
     let runStderr = '';
     let runKilledByServerTimeout = false;
 
-
     const serverSideRunTimeout = setTimeout(() => {
         if (!runProcess.killed) {
             runProcess.kill('SIGKILL');
             runKilledByServerTimeout = true;
         }
     }, EXECUTION_TIMEOUT_MS);
-
 
     if (input) {
       runProcess.stdin.write(input);
@@ -101,20 +100,32 @@ app.post('/run', async (req, res) => {
     runProcess.stdout.on('data', (data) => { runStdout += data.toString(); });
     runProcess.stderr.on('data', (data) => { runStderr += data.toString(); });
     
-    runProcess.on('error', (err) => {
+    runProcess.on('error', (err) => { // Handle executable spawn errors
       clearTimeout(serverSideRunTimeout);
-      console.error(`Execution process error for ${uniqueId}:`, err);
-      runStderr += `\nFailed to start executable: ${err.message}`;
+      console.error(`Execution process spawn error for ${uniqueId}:`, err);
+      runStderr += (runStderr ? "\n" : "") + `Failed to start executable: ${err.message}`;
       // No need to resolve promise here as 'close' will still fire
     });
 
     await new Promise((resolve) => {
       runProcess.on('close', (runExitCode) => {
         clearTimeout(serverSideRunTimeout);
-        if (runKilledByServerTimeout && runExitCode !== 0 ) { // Killed by timeout
-            runStderr += (runStderr ? "\n" : "") + "Execution timed out after " + (EXECUTION_TIMEOUT_MS/1000) + " seconds (server limit).";
-        } else if (runExitCode !== 0 && !runStderr && runExitCode === 124) { // timeout command exit code for timeout
-            runStderr += (runStderr ? "\n" : "") + "Execution timed out after 5 seconds (container limit).";
+        
+        let timeoutMessage = "";
+        if (runKilledByServerTimeout) { // Server-side timeout takes precedence
+            timeoutMessage = `Execution timed out after ${EXECUTION_TIMEOUT_MS / 1000} seconds (server limit).`;
+        } else if (runExitCode === 124) { // Specific exit code from 'timeout' command (sandbox limit)
+            timeoutMessage = "Execution timed out after 5 seconds (sandbox limit).";
+        }
+
+        if (timeoutMessage) {
+            runStderr = runStderr.trim() ? `${runStderr.trim()}\n${timeoutMessage}` : timeoutMessage;
+        } else if (runExitCode !== 0 && !runStderr.trim()) {
+            // If it failed with a non-zero exit code but produced no stderr, add a generic message
+            runStderr = `Execution failed with exit code ${runExitCode}.`;
+        } else if (runExitCode !== 0 && runStderr.trim()) {
+            // If it failed and there's stderr, ensure it's clean or append exit code if useful
+            // runStderr = runStderr.trim() + ` (exit code: ${runExitCode})`; // Optional: append exit code
         }
         resolve(runExitCode);
       });
