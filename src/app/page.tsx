@@ -61,8 +61,8 @@ int main() {
 export default function HomePage() {
   const [code, setCode] = useState<string>(initialCppCode);
   const [userInput, setUserInput] = useState<string>("");
-  const [output, setOutput] = useState<string>("");
-  const [explanation, setExplanation] = useState<string>("");
+  const [output, setOutput] = useState<string>(""); // For execution output
+  const [explanation, setExplanation] = useState<string>(""); // For AI explanation
   
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [isGeneratingAiCode, setIsGeneratingAiCode] = useState<boolean>(false);
@@ -86,8 +86,8 @@ export default function HomePage() {
       return;
     }
     setIsExecuting(true);
-    setOutput("Executing code...\n"); 
     setExplanation(""); // Clear previous explanation
+    setOutput("Executing code...\n"); 
     try {
       const response = await fetch('/api/run-cpp', {
         method: 'POST',
@@ -159,8 +159,8 @@ export default function HomePage() {
       return;
     }
     setIsExplainingCode(true);
+    setOutput(""); // Clear previous execution output
     setExplanation("AI is analyzing your code...");
-    setOutput(""); // Clear previous output
     try {
       const input: ExplainCodeInput = { code };
       const result = await explainCode(input);
@@ -203,7 +203,7 @@ export default function HomePage() {
     setShowGenerateCodeDialog(false); 
   };
 
-  const handleClearConsole = () => {
+  const handleClearConsoleOutput = () => {
     setOutput("");
   };
   
@@ -241,28 +241,23 @@ export default function HomePage() {
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={50} minSize={30}>
-            <ResizablePanelGroup direction="vertical" className="h-full">
-              <ResizablePanel defaultSize={50} minSize={20}>
-                <div className="flex flex-col h-full p-1 md:p-2 space-y-2 md:space-y-3">
-                  <div className="flex-shrink-0" style={{ height: '35%'}}>
-                    <InputConsole 
-                      value={userInput} 
-                      onChange={setUserInput} 
-                      disabled={anyOperationInProgress} 
-                    />
-                  </div>
-                  <div className="flex-grow" style={{ height: '65%'}}>
-                    <OutputConsole output={output} onClear={handleClearConsole} isExecuting={isExecuting} />
-                  </div>
-                </div>
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={50} minSize={20}>
-                <div className="flex flex-col h-full p-1 md:p-2">
-                 <AiExplanation explanation={explanation} isLoading={isExplainingCode} />
-                </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
+            <div className="flex flex-col h-full p-1 md:p-2 space-y-2 md:space-y-3">
+              <div className="flex-shrink-0" style={{ height: '35%'}}>
+                <InputConsole 
+                  value={userInput} 
+                  onChange={setUserInput} 
+                  disabled={anyOperationInProgress} 
+                />
+              </div>
+              <div className="flex-grow" style={{ height: '65%'}}>
+                { (isExplainingCode || explanation) ? (
+                    <AiExplanation explanation={explanation} isLoading={isExplainingCode} />
+                  ) : (
+                    <OutputConsole output={output} onClear={handleClearConsoleOutput} isExecuting={isExecuting} />
+                  )
+                }
+              </div>
+            </div>
           </ResizablePanel>
         </ResizablePanelGroup>
       </main>
@@ -287,3 +282,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+    
