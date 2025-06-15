@@ -1,13 +1,15 @@
+
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Header } from "@/components/layout/Header";
 import { OutputConsole } from "@/components/code-vision/OutputConsole";
+import { InputConsole } from "@/components/code-vision/InputConsole";
 import { AiCodeGenerator } from "@/components/code-vision/AiCodeGenerator";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
-import { Play, Loader2, FileCode, Code2 } from "lucide-react";
+import { Play, Loader2, Code2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,13 +28,12 @@ const initialCppCode = `#include <iostream>
 #include <vector>
 #include <string>
 
-// Function to greet the user
-void greet(const std::string& name) {
-    std::cout << "Hello, " << name << " from CodeVision C++!" << std::endl;
-}
-
+// Main function to demonstrate input and output
 int main() {
-    greet("Developer");
+    std::string name;
+    std::cout << "Enter your name: ";
+    std::cin >> name;
+    std::cout << "Hello, " << name << " from CodeVision C++!" << std::endl;
 
     // Example of using a vector
     std::vector<int> numbers = {1, 2, 3, 4, 5};
@@ -42,7 +43,12 @@ int main() {
     }
     std::cout << std::endl;
 
-    std::cout << "Enter a short description above and click 'Generate Code' to see AI in action!" << std::endl;
+    // Example of reading multiple inputs
+    int val1, val2;
+    std::cout << "Enter two integers separated by space: ";
+    std::cin >> val1 >> val2;
+    std::cout << "You entered: " << val1 << " and " << val2 << std::endl;
+    std::cout << "Their sum is: " << val1 + val2 << std::endl;
 
     return 0;
 }
@@ -50,43 +56,79 @@ int main() {
 
 export default function HomePage() {
   const [code, setCode] = useState<string>(initialCppCode);
+  const [userInput, setUserInput] = useState<string>("");
   const [output, setOutput] = useState<string>("");
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [isGeneratingAiCode, setIsGeneratingAiCode] = useState<boolean>(false);
   const { toast } = useToast();
   
-  // Debounce editor changes
   const handleEditorChange = useCallback((value: string | undefined) => {
     setCode(value || "");
   }, []);
 
   const handleRunCode = async () => {
     setIsExecuting(true);
-    setOutput(""); // Clear previous output
-    // Simulate code execution
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Mock output based on current code for demonstration
-    let mockOutput = "Executing code...\n";
-    if (code.includes("std::cout")) {
-      if (code.includes("Hello, CodeVision C++!")) {
-        mockOutput += "Hello, Developer from CodeVision C++!\nNumbers in vector: 1 2 3 4 5 \nEnter a short description above and click 'Generate Code' to see AI in action!\n";
-      } else if (code.includes("Hello")) {
-         mockOutput += code.match(/std::cout << "(.*?)"/)?.[1] + "\n" || "Sample Output\n";
-      } else {
-        mockOutput += "Code executed. (Mocked output)\n";
-      }
-    } else {
-      mockOutput += "No output statements found (std::cout). (Mocked output)\n";
-    }
-    mockOutput += "Execution finished.";
+    setOutput("Executing code...\n"); 
+    try {
+      const response = await fetch('/api/run-cpp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code, input: userInput }),
+      });
 
-    setOutput(mockOutput);
-    setIsExecuting(false);
-    toast({
-      title: "Code Execution",
-      description: "Code execution finished (simulated).",
-    });
+      const result = await response.json();
+
+      if (response.ok) {
+        let fullOutput = "";
+        if (result.output) {
+          fullOutput += `Output:\n${result.output}\n\n`;
+        }
+        if (result.error) {
+          fullOutput += `Errors/Stderr:\n${result.error}\n`;
+        }
+        if (!result.output && !result.error) {
+          fullOutput = "Execution finished with no output or errors.";
+        }
+        setOutput(fullOutput.trim() || "Execution finished. (No textual output)");
+        
+        if (result.error && (response.status !== 200 || result.error.toLowerCase().includes("error:") || result.error.includes("timed out"))) {
+             toast({
+                variant: "destructive",
+                title: "Execution Problem",
+                description: "Code might have compilation errors, runtime issues, or timed out. Check Errors/Stderr.",
+            });
+        } else if (result.error) {
+            toast({ // For warnings or non-critical stderr
+                title: "Execution Finished with Messages",
+                description: "Code executed. Check Errors/Stderr for additional messages.",
+            });
+        }
+         else {
+            toast({
+                title: "Code Execution Successful",
+                description: "Code execution finished.",
+            });
+        }
+      } else {
+        setOutput(`Error: ${result.error || 'Failed to execute code.'}`);
+        toast({
+          variant: "destructive",
+          title: "API Error",
+          description: result.error || "An unknown error occurred with the execution service.",
+        });
+      }
+    } catch (error: any) {
+      setOutput(`Network or server error: ${error.message}`);
+      toast({
+        variant: "destructive",
+        title: "Network Error",
+        description: "Could not connect to the execution service. Please ensure Docker is running and accessible.",
+      });
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const handleClearConsole = () => {
@@ -95,6 +137,7 @@ export default function HomePage() {
 
   const handleCodeGenerated = (generatedCode: string) => {
     setCode(generatedCode);
+    setUserInput(""); // Clear input when new code is generated
   };
 
   return (
@@ -133,8 +176,17 @@ export default function HomePage() {
                 )}
                 Run Code
               </Button>
-              <div className="flex-grow overflow-hidden">
-                <OutputConsole output={output} onClear={handleClearConsole} isExecuting={isExecuting} />
+              <div className="flex-grow flex flex-col space-y-2 md:space-y-4 overflow-hidden">
+                <div className="min-h-[100px] max-h-48"> 
+                  <InputConsole 
+                    value={userInput} 
+                    onChange={setUserInput} 
+                    disabled={isExecuting || isGeneratingAiCode} 
+                  />
+                </div>
+                <div className="flex-grow overflow-hidden">
+                  <OutputConsole output={output} onClear={handleClearConsole} isExecuting={isExecuting} />
+                </div>
               </div>
             </div>
           </ResizablePanel>
