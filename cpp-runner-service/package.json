@@ -1,0 +1,16 @@
+
+{
+  "name": "cpp-runner-service",
+  "version": "1.0.0",
+  "description": "A service to compile and run C++ code",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "uuid": "^9.0.1"
+  },
+  "author": "Firebase Studio",
+  "license": "ISC"
+}

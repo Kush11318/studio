@@ -1,0 +1,45 @@
+
+# This is a render.yaml file for deploying services on Render.
+# Push this file to the root of your Git repository.
+# Render will automatically detect and deploy services defined here.
+
+services:
+  # Your main Next.js application (assuming it's already configured or you'll add it)
+  # - type: web
+  #   name: nextjs-code-editor 
+  #   env: node
+  #   region: oregon # optional
+  #   plan: free # optional
+  #   buildCommand: "npm install && npm run build"
+  #   startCommand: "npm run start"
+  #   envVars:
+  #     - key: NODE_VERSION
+  #       value: 18
+  #     - key: EXTERNAL_DOCKER_RUNNER_URL
+  #       fromService: # This assumes your runner service is named 'cpp-runner'
+  #         type: web 
+  #         name: cpp-runner 
+  #         property: url # This will automatically use the URL of the cpp-runner service
+
+  # C++ Code Runner Service
+  - type: web # Specifies this is a web service
+    name: cpp-runner # The name of your service on Render
+    env: docker # Specifies that this service will be built from a Dockerfile
+    region: oregon # Optional: specify a region, e.g., oregon, frankfurt
+    plan: free # Optional: Render's free plan might have limitations. Check their docs for resource limits.
+               # For more intensive use, consider a paid plan.
+    dockerContext: ./cpp-runner-service # Path to the directory containing the Dockerfile and source code
+    dockerfilePath: ./cpp-runner-service/Dockerfile # Path to the Dockerfile for this service
+    healthCheckPath: /health # An endpoint Render can hit to check if your service is healthy
+    envVars:
+      - key: PORT # Render sets this automatically, but good to be explicit if your Dockerfile uses it
+        value: 3001 # The port your cpp-runner-service/server.js listens on internally
+      # Add any other environment variables your runner service might need
+      # - key: MY_OTHER_ENV_VAR
+      #   value: some_value
+
+# Note: If your Next.js app is also deployed on Render (recommended for simplicity),
+# you can use service discovery for the EXTERNAL_DOCKER_RUNNER_URL.
+# The example above for 'nextjs-code-editor' shows how to link it using `fromService`.
+# If your Next.js app is hosted elsewhere, you'll manually copy the URL of the 
+# deployed 'cpp-runner' service from the Render dashboard and set it in your Next.js app's .env file.
