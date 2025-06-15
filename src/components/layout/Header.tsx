@@ -33,13 +33,13 @@ export function Header({
           <h1 className="text-xl md:text-2xl font-headline font-bold text-primary">CodeVision C++</h1>
         </div>
         <div className="flex items-center space-x-2">
-          <Button onClick={onRunCode} disabled={isRunDisabled} size="sm">
-            {isLoadingRun ? (
+          <Button onClick={onGenerateCode} disabled={isGenerateDisabled} variant="outline" size="sm">
+            {isLoadingGenerate ? (
               <Loader2 className="animate-spin" />
             ) : (
-              <Play />
+              <Wand2 />
             )}
-            <span className="ml-2 hidden sm:inline">Run Code</span>
+            <span className="ml-2 hidden sm:inline">Generate Code</span>
           </Button>
           <Button onClick={onExplainCode} disabled={isExplainDisabled} variant="outline" size="sm">
             {isLoadingExplain ? (
@@ -49,13 +49,13 @@ export function Header({
             )}
             <span className="ml-2 hidden sm:inline">Explain Code</span>
           </Button>
-          <Button onClick={onGenerateCode} disabled={isGenerateDisabled} variant="outline" size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground">
-            {isLoadingGenerate ? (
+          <Button onClick={onRunCode} disabled={isRunDisabled} size="sm">
+            {isLoadingRun ? (
               <Loader2 className="animate-spin" />
             ) : (
-              <Wand2 />
+              <Play />
             )}
-            <span className="ml-2 hidden sm:inline">Generate Code</span>
+            <span className="ml-2 hidden sm:inline">Run Code</span>
           </Button>
         </div>
       </div>
