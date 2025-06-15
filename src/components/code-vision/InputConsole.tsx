@@ -25,7 +25,7 @@ export function InputConsole({ value, onChange, disabled }: InputConsoleProps) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Enter input for your C++ program here, if any..."
-          className="h-full w-full resize-none border-0 rounded-none focus-visible:ring-0 font-code p-4 text-sm"
+          className="h-full w-full resize-none border-0 rounded-none focus-visible:ring-0 font-code p-2 md:p-4 text-sm"
           disabled={disabled}
           aria-label="Standard Input for C++ program"
         />

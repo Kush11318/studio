@@ -7,12 +7,16 @@ import { Header } from "@/components/layout/Header";
 import { OutputConsole } from "@/components/code-vision/OutputConsole";
 import { InputConsole } from "@/components/code-vision/InputConsole";
 import { AiCodeGenerator } from "@/components/code-vision/AiCodeGenerator";
+import { AiExplanation } from "@/components/code-vision/AiExplanation";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { Button } from "@/components/ui/button";
-import { Play, Loader2, Code2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Code2 } from "lucide-react";
+import { explainCode, type ExplainCodeInput } from "@/ai/flows/explain-code-flow";
+import { generateCodeSnippet, type GenerateCodeSnippetInput } from "@/ai/flows/generate-code-snippet";
+
 
 const CodeEditor = dynamic(() => import("@/components/code-vision/CodeEditor"), {
   ssr: false,
@@ -58,8 +62,14 @@ export default function HomePage() {
   const [code, setCode] = useState<string>(initialCppCode);
   const [userInput, setUserInput] = useState<string>("");
   const [output, setOutput] = useState<string>("");
+  const [explanation, setExplanation] = useState<string>("");
+  
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [isGeneratingAiCode, setIsGeneratingAiCode] = useState<boolean>(false);
+  const [isExplainingCode, setIsExplainingCode] = useState<boolean>(false);
+  
+  const [showGenerateCodeDialog, setShowGenerateCodeDialog] = useState<boolean>(false);
+  
   const { toast } = useToast();
   
   const handleEditorChange = useCallback((value: string | undefined) => {
@@ -67,8 +77,17 @@ export default function HomePage() {
   }, []);
 
   const handleRunCode = async () => {
+    if (!code.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Empty Code",
+        description: "Cannot run empty code. Please write some C++ code.",
+      });
+      return;
+    }
     setIsExecuting(true);
     setOutput("Executing code...\n"); 
+    setExplanation(""); // Clear previous explanation
     try {
       const response = await fetch('/api/run-cpp', {
         method: 'POST',
@@ -100,12 +119,11 @@ export default function HomePage() {
                 description: "Code might have compilation errors, runtime issues, or timed out. Check Errors/Stderr.",
             });
         } else if (result.error) {
-            toast({ // For warnings or non-critical stderr
+            toast({ 
                 title: "Execution Finished with Messages",
                 description: "Code executed. Check Errors/Stderr for additional messages.",
             });
-        }
-         else {
+        } else {
             toast({
                 title: "Code Execution Successful",
                 description: "Code execution finished.",
@@ -124,74 +142,148 @@ export default function HomePage() {
       toast({
         variant: "destructive",
         title: "Network Error",
-        description: "Could not connect to the execution service. Please ensure Docker is running and accessible.",
+        description: "Could not connect to the execution service.",
       });
     } finally {
       setIsExecuting(false);
     }
   };
 
+  const handleExplainCode = async () => {
+    if (!code.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Empty Code",
+        description: "Cannot explain empty code. Please write or generate some C++ code.",
+      });
+      return;
+    }
+    setIsExplainingCode(true);
+    setExplanation("AI is analyzing your code...");
+    setOutput(""); // Clear previous output
+    try {
+      const input: ExplainCodeInput = { code };
+      const result = await explainCode(input);
+      if (result && result.explanation) {
+        setExplanation(result.explanation);
+        toast({
+          title: "Code Explained",
+          description: "AI has provided an explanation for your code.",
+        });
+      } else {
+        setExplanation("Failed to get explanation from AI.");
+        toast({
+          variant: "destructive",
+          title: "Explanation Error",
+          description: "AI did not return an explanation.",
+        });
+      }
+    } catch (error) {
+      console.error("AI Code Explanation Error:", error);
+      setExplanation("An error occurred while generating the explanation.");
+      toast({
+        variant: "destructive",
+        title: "Explanation Error",
+        description: "An error occurred while explaining the code. Please try again.",
+      });
+    } finally {
+      setIsExplainingCode(false);
+    }
+  };
+
+  const handleGenerateCodeRequest = () => {
+    setShowGenerateCodeDialog(true);
+  };
+
+  const handleCodeGeneratedByAI = (generatedCode: string) => {
+    setCode(generatedCode);
+    setUserInput(""); 
+    setExplanation(""); 
+    setOutput("");
+    setShowGenerateCodeDialog(false); 
+  };
+
   const handleClearConsole = () => {
     setOutput("");
   };
-
-  const handleCodeGenerated = (generatedCode: string) => {
-    setCode(generatedCode);
-    setUserInput(""); // Clear input when new code is generated
-  };
+  
+  const anyOperationInProgress = isExecuting || isGeneratingAiCode || isExplainingCode;
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      <Header />
-      <main className="flex-grow p-4 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal" className="h-full max-h-[calc(100vh-100px)] rounded-lg border shadow-xl">
-          <ResizablePanel defaultSize={60} minSize={30}>
-            <div className="flex flex-col h-full p-1 md:p-2 space-y-2 md:space-y-4">
-              <AiCodeGenerator 
-                onCodeGenerated={handleCodeGenerated}
-                isGenerating={isGeneratingAiCode}
-                setIsGenerating={setIsGeneratingAiCode}
-              />
-              <Card className="flex-grow flex flex-col overflow-hidden shadow-md rounded-md">
+      <Header 
+        onRunCode={handleRunCode}
+        onExplainCode={handleExplainCode}
+        onGenerateCode={handleGenerateCodeRequest}
+        isRunDisabled={anyOperationInProgress || !code.trim()}
+        isExplainDisabled={anyOperationInProgress || !code.trim()}
+        isGenerateDisabled={anyOperationInProgress}
+        isLoadingRun={isExecuting}
+        isLoadingExplain={isExplainingCode}
+        isLoadingGenerate={isGeneratingAiCode}
+      />
+      <main className="flex-grow p-2 md:p-4 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal" className="h-full max-h-[calc(100vh-80px)] rounded-lg border shadow-lg">
+          <ResizablePanel defaultSize={50} minSize={30}>
+            <div className="flex flex-col h-full p-1 md:p-2">
+              <Card className="flex-grow flex flex-col overflow-hidden shadow-md rounded-md h-full">
                 <CardHeader className="flex flex-row items-center justify-between py-2 px-4 border-b">
                   <div className="flex items-center">
                     <Code2 className="h-5 w-5 mr-2 text-primary" />
                     <CardTitle className="text-lg font-headline">C++ Editor</CardTitle>
                   </div>
                 </CardHeader>
-                <CardContent className="p-0 flex-grow overflow-hidden">
+                <CardContent className="p-0 flex-grow overflow-hidden h-full">
                   <CodeEditor value={code} onChange={handleEditorChange} language="cpp" />
                 </CardContent>
               </Card>
             </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={40} minSize={20}>
-            <div className="flex flex-col h-full p-1 md:p-2 space-y-2 md:space-y-4">
-              <Button onClick={handleRunCode} disabled={isExecuting || isGeneratingAiCode} className="w-full font-medium shadow-md">
-                {isExecuting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="mr-2 h-4 w-4" />
-                )}
-                Run Code
-              </Button>
-              <div className="flex-grow flex flex-col space-y-2 md:space-y-4 overflow-hidden">
-                <div className="min-h-[100px] max-h-48"> 
-                  <InputConsole 
-                    value={userInput} 
-                    onChange={setUserInput} 
-                    disabled={isExecuting || isGeneratingAiCode} 
-                  />
+          <ResizablePanel defaultSize={50} minSize={30}>
+            <ResizablePanelGroup direction="vertical" className="h-full">
+              <ResizablePanel defaultSize={50} minSize={20}>
+                <div className="flex flex-col h-full p-1 md:p-2 space-y-2 md:space-y-3">
+                  <div className="flex-shrink-0" style={{ height: '35%'}}>
+                    <InputConsole 
+                      value={userInput} 
+                      onChange={setUserInput} 
+                      disabled={anyOperationInProgress} 
+                    />
+                  </div>
+                  <div className="flex-grow" style={{ height: '65%'}}>
+                    <OutputConsole output={output} onClear={handleClearConsole} isExecuting={isExecuting} />
+                  </div>
                 </div>
-                <div className="flex-grow overflow-hidden">
-                  <OutputConsole output={output} onClear={handleClearConsole} isExecuting={isExecuting} />
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={50} minSize={20}>
+                <div className="flex flex-col h-full p-1 md:p-2">
+                 <AiExplanation explanation={explanation} isLoading={isExplainingCode} />
                 </div>
-              </div>
-            </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
           </ResizablePanel>
         </ResizablePanelGroup>
       </main>
+
+      <Dialog open={showGenerateCodeDialog} onOpenChange={setShowGenerateCodeDialog}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              AI Code Snippet Generator
+            </DialogTitle>
+            <DialogDescription>
+              Describe the C++ code snippet you need, and the AI will generate it for you.
+            </DialogDescription>
+          </DialogHeader>
+          <AiCodeGenerator 
+            onCodeGenerated={handleCodeGeneratedByAI}
+            isGenerating={isGeneratingAiCode}
+            setIsGenerating={setIsGeneratingAiCode}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
