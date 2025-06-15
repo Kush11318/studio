@@ -18,25 +18,24 @@ export async function POST(req: NextRequest) {
     }
 
     if (EXTERNAL_DOCKER_RUNNER_URL) {
-      console.log(`Using external Docker runner: ${EXTERNAL_DOCKER_RUNNER_URL}`);
+      console.log(`Attempting to use external Docker runner. Target URL: ${EXTERNAL_DOCKER_RUNNER_URL}`);
       try {
         const externalResponse = await fetch(EXTERNAL_DOCKER_RUNNER_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            // Consider adding authentication headers if your external service requires them
           },
           body: JSON.stringify({ code, input }),
-          signal: AbortSignal.timeout(20000), // 20-second timeout for the external request
+          signal: AbortSignal.timeout(20000), 
         });
 
         if (!externalResponse.ok) {
-          let errorDetails = 'No details available from external service.';
+          let errorDetails = `Service responded with status ${externalResponse.status} (${externalResponse.statusText}).`;
           try {
-            // Try to get more specific error details from the response body
-            errorDetails = await externalResponse.text();
+            const textResponse = await externalResponse.text();
+            errorDetails += ` Response body: ${textResponse}`;
           } catch (parseError) {
-            // Ignore if parsing response body fails, keep the generic message
+            errorDetails += ' Could not parse response body.';
           }
           console.error(`External runner service error: ${externalResponse.status} ${externalResponse.statusText}`, errorDetails);
           return NextResponse.json(
@@ -46,7 +45,6 @@ export async function POST(req: NextRequest) {
         }
 
         const result = await externalResponse.json();
-        // Assuming the external service returns a JSON object like { output: string, error: string }
         return NextResponse.json(result, { status: 200 });
 
       } catch (fetchError: any) {
@@ -57,7 +55,7 @@ export async function POST(req: NextRequest) {
         } else if (fetchError instanceof Error) {
             errorMessage = `Error connecting to external service: ${fetchError.message}`;
         }
-        return NextResponse.json({ error: errorMessage, details: fetchError.toString() }, { status: 503 }); // 503 Service Unavailable
+        return NextResponse.json({ error: errorMessage, details: fetchError.toString() }, { status: 503 });
       }
     } else {
       console.warn('EXTERNAL_DOCKER_RUNNER_URL is not set. Falling back to local Docker execution. Please set this environment variable in .env for your external service.');
@@ -145,7 +143,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('API Error in run-cpp:', error);
     if (tempDir) {
-      const currentTempDir = tempDir; // Capture for async cleanup
+      const currentTempDir = tempDir; 
       await fs.rm(currentTempDir, { recursive: true, force: true }).catch(rmErr => console.error(`Error removing tempDir ${currentTempDir} in outer catch:`, rmErr));
     }
     return NextResponse.json({ error: `Server error: ${error.message}` }, { status: 500 });
