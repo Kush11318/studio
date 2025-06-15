@@ -4,6 +4,7 @@ import Editor, { OnChange, OnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface CodeEditorProps {
   value: string;
