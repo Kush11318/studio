@@ -57,13 +57,17 @@ export async function POST(req: NextRequest) {
         stderr += data.toString();
       });
 
-      dockerProcess.on('error', (err) => {
+      dockerProcess.on('error', (err: NodeJS.ErrnoException) => {
         clearTimeout(processTimeout);
         console.error('Failed to start Docker process:', err);
         if (tempDir) {
           fs.rm(tempDir, { recursive: true, force: true }).catch(console.error);
         }
-        resolve(NextResponse.json({ output: stdout, error: `Failed to start Docker process: ${err.message}` }, { status: 500 }));
+        let errorMessage = `Failed to start Docker process: ${err.message}`;
+        if (err.code === 'ENOENT') {
+          errorMessage = "Failed to start Docker process: The 'docker' command was not found. Please ensure Docker is installed and its executable is in your system's PATH environment variable.";
+        }
+        resolve(NextResponse.json({ output: stdout, error: errorMessage }, { status: 500 }));
       });
 
       dockerProcess.on('close', (exitCode) => {
